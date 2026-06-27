@@ -380,6 +380,7 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
         }
 
         stickyHeader(key = "search_bar") {
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -392,8 +393,11 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
                     placeholder = { Text("Search installed applications...") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                     trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                        if (searchQuery.isNotEmpty() || isSearchFocused) {
+                            IconButton(onClick = { 
+                                viewModel.updateSearchQuery("")
+                                focusManager.clearFocus()
+                            }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear")
                             }
                         }

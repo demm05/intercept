@@ -187,7 +187,11 @@ class AppInterceptorService : AccessibilityService() {
                 
                 rootNode?.recycle() // Always recycle immediately after scanning
 
-                if (targetsOurApp && isDeviceAdminScreen) {
+                val adminComponent = android.content.ComponentName(this, MyDeviceAdminReceiver::class.java)
+                val dpm = getSystemService(android.content.Context.DEVICE_POLICY_SERVICE) as android.app.admin.DevicePolicyManager
+                val isAlreadyActive = dpm.isAdminActive(adminComponent)
+
+                if (targetsOurApp && isDeviceAdminScreen && isAlreadyActive) {
                     Log.w("AppInterceptorService", "Blocked access to Device Admin deactivation.")
                     performGlobalAction(GLOBAL_ACTION_HOME)
                     return
