@@ -1,0 +1,6 @@
+{
+  "name": "Focus Interceptor",
+  "description": "An elegant, high-performance screen-time blocker that intercepts targeted apps with a 10-second mindfulness countdown.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

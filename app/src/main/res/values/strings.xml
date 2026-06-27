@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Focus Interceptor</string>
+    <string name="accessibility_service_description">Monitors when targeted applications are launched and prompts you with a 10-second mindfulness breathing count-down to help reduce mindless screen time.</string>
+</resources>
