@@ -197,6 +197,11 @@ class AppInterceptorService : AccessibilityService() {
                     return
                 }
 
+                if (targetsOurApp && isDeviceAdminScreen && !isAlreadyActive) {
+                    // User is trying to activate Device Admin. Do not trigger the overlay.
+                    return
+                }
+
                 val lastUnlock = unlockedApps[packageName] ?: 0L
                 val bypassDurationMs = bypassDurationSeconds * 1000L
                 val elapsed = System.currentTimeMillis() - lastUnlock
