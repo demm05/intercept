@@ -7,10 +7,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
-import android.util.Log
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,11 +19,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontFamily
@@ -31,12 +30,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.*
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.example.MainActivity
 import com.example.data.DataStoreRepository
 import com.example.ui.theme.MyApplicationTheme
+import com.example.utils.FocusLogger
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -87,7 +88,7 @@ class AppInterceptorService : AccessibilityService() {
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_SCREEN_OFF) {
-                Log.d("AppInterceptorService", "Screen off detected. Removing overlay.")
+                FocusLogger.d("AppInterceptorService", "Screen off detected. Removing overlay.")
                 removeOverlay()
             }
         }
@@ -105,14 +106,14 @@ class AppInterceptorService : AccessibilityService() {
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         registerReceiver(screenStateReceiver, filter)
         
-        Log.d("PausePoint", "AppInterceptorService created.")
+        FocusLogger.d("PausePoint", "AppInterceptorService created.")
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         serviceConnectTime = System.currentTimeMillis()
         instance = this
-        Log.d("PausePoint", "AccessibilityService connected successfully. Initializing configurations...")
+        FocusLogger.d("PausePoint", "AccessibilityService connected successfully. Initializing configurations...")
 
         // Automatically return to the app after enabling the service
         val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
@@ -128,7 +129,7 @@ class AppInterceptorService : AccessibilityService() {
         serviceScope.launch(Dispatchers.IO) {
             repository.isServiceActive.collect { active ->
                 isServiceActive = active
-                Log.d("PausePoint", "Service active status cache loaded/updated: $active")
+                FocusLogger.d("PausePoint", "Service active status cache loaded/updated: $active")
             }
         }
 
@@ -137,28 +138,28 @@ class AppInterceptorService : AccessibilityService() {
                 // Swap local volatile reference to avoid concurrent modification issues
                 val updatedSet = HashSet(packages)
                 cachedTargetedPackages = updatedSet
-                Log.d("PausePoint", "Targeted packages cache loaded/updated. Package count: ${updatedSet.size}. Targets: $updatedSet")
+                FocusLogger.d("PausePoint", "Targeted packages cache loaded/updated. Package count: ${updatedSet.size}. Targets: $updatedSet")
             }
         }
 
         serviceScope.launch(Dispatchers.IO) {
             repository.countdownDurationSeconds.collect { secs ->
                 countdownDurationSeconds = secs
-                Log.d("PausePoint", "Countdown duration cache loaded/updated: $secs seconds")
+                FocusLogger.d("PausePoint", "Countdown duration cache loaded/updated: $secs seconds")
             }
         }
 
         serviceScope.launch(Dispatchers.IO) {
             repository.sessionLimitMinutes.collect { mins ->
                 sessionLimitMinutes = mins
-                Log.d("PausePoint", "Session limit cache loaded/updated: $mins minutes")
+                FocusLogger.d("PausePoint", "Session limit cache loaded/updated: $mins minutes")
             }
         }
 
         serviceScope.launch(Dispatchers.IO) {
             repository.bypassDurationSeconds.collect { secs ->
                 bypassDurationSeconds = secs
-                Log.d("PausePoint", "Bypass duration cache loaded/updated: $secs seconds")
+                FocusLogger.d("PausePoint", "Bypass duration cache loaded/updated: $secs seconds")
             }
         }
     }
@@ -197,7 +198,7 @@ class AppInterceptorService : AccessibilityService() {
                 val isAlreadyActive = dpm.isAdminActive(adminComponent)
 
                 if (targetsOurApp && isDeviceAdminScreen && isAlreadyActive) {
-                    Log.w("AppInterceptorService", "Blocked access to Device Admin deactivation.")
+                    FocusLogger.w("AppInterceptorService", "Blocked access to Device Admin deactivation.")
                     performGlobalAction(GLOBAL_ACTION_HOME)
                     return
                 }
@@ -213,7 +214,7 @@ class AppInterceptorService : AccessibilityService() {
                 
                 if (elapsed > bypassDurationMs) {
                     if (targetsOurApp) {
-                        Log.w("AppInterceptorService", "Defensive protection triggered for settings bypass attempt.")
+                        FocusLogger.w("AppInterceptorService", "Defensive protection triggered for settings bypass attempt.")
                         deployOverlay(packageName, launchAppOnUnlock = false)
                         return
                     }
@@ -226,7 +227,7 @@ class AppInterceptorService : AccessibilityService() {
                 // This prevents false interceptions when closing apps or returning home.
                 val activeWindowPackage = rootInActiveWindow?.packageName?.toString()
                 if (activeWindowPackage != packageName) {
-                    Log.d("AppInterceptorService", "Ignoring event for $packageName as it is no longer in foreground.")
+                    FocusLogger.d("AppInterceptorService", "Ignoring event for $packageName as it is no longer in foreground.")
                     return
                 }
 
@@ -258,7 +259,7 @@ class AppInterceptorService : AccessibilityService() {
             while (isActive) {
                 val elapsed = System.currentTimeMillis() - startTime
                 if (elapsed >= limitMs) {
-                    Log.i("AppInterceptorService", "Session limit reached for $packageName. Kicking to home.")
+                    FocusLogger.i("AppInterceptorService", "Session limit reached for $packageName. Kicking to home.")
                     unlockedApps.remove(packageName)
                     performGlobalAction(GLOBAL_ACTION_HOME)
                     break
@@ -282,7 +283,7 @@ class AppInterceptorService : AccessibilityService() {
             val container = object : android.widget.FrameLayout(this@AppInterceptorService) {
                 override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
                     if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP) {
-                        Log.d("AppInterceptorService", "Back button intercepted in overlay.")
+                        FocusLogger.d("AppInterceptorService", "Back button intercepted in overlay.")
                         performGlobalAction(GLOBAL_ACTION_HOME)
                         removeOverlay()
                         return true
@@ -350,9 +351,9 @@ class AppInterceptorService : AccessibilityService() {
 
             try {
                 windowManager?.addView(container, params)
-                Log.d("AppInterceptorService", "Mindfulness overlay deployed successfully.")
+                FocusLogger.d("AppInterceptorService", "Mindfulness overlay deployed successfully.")
             } catch (e: Exception) {
-                Log.e("AppInterceptorService", "Error injecting overlay window", e)
+                FocusLogger.e("AppInterceptorService", "Error injecting overlay window", e)
             }
         }
     }
@@ -366,9 +367,9 @@ class AppInterceptorService : AccessibilityService() {
 
             try {
                 windowManager?.removeView(view)
-                Log.d("AppInterceptorService", "Overlay removed successfully.")
+                FocusLogger.d("AppInterceptorService", "Overlay removed successfully.")
             } catch (e: Exception) {
-                Log.e("AppInterceptorService", "Error releasing overlay window", e)
+                FocusLogger.e("AppInterceptorService", "Error releasing overlay window", e)
             } finally {
                 lifecycle?.destroy()
             }
@@ -472,9 +473,9 @@ fun CountdownOverlayContent(
     val infiniteTransition = rememberInfiniteTransition(label = "breathing")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = 1.15f,
+        targetValue = 1.4f,
         animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearOutSlowInEasing),
+            animation = tween(1800, easing = LinearOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "breathing_scale"
@@ -483,7 +484,7 @@ fun CountdownOverlayContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xEE141218)), // Translucent dark (approx 93% opacity)
+            .background(Color.Black.copy(alpha = 0.98f)), // Near solid black
         contentAlignment = Alignment.Center
     ) {
         Column(
