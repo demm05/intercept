@@ -19,6 +19,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +57,7 @@ class AppInterceptorService : AccessibilityService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
 
     private var windowManager: WindowManager? = null
-    private var currentOverlayView: ComposeView? = null
+    private var currentOverlayView: android.view.View? = null
     private var currentLifecycleOwner: MyLifecycleOwner? = null
 
     // Volatile, in-memory caches for ultra-low latency lookups without allocations
@@ -230,11 +235,7 @@ class AppInterceptorService : AccessibilityService() {
                 val elapsed = System.currentTimeMillis() - lastUnlock
 
                 if (elapsed > bypassDurationMs) {
-                    // "Instant Minimize" Strategy:
-                    // Send the user home immediately to stop the distracting app from loading.
-                    performGlobalAction(GLOBAL_ACTION_HOME)
-                    
-                    // Then deploy our mindfulness overlay on top of the home screen.
+                    // Deploy our mindfulness overlay directly on top of the targeted app.
                     deployOverlay(packageName)
                 } else {
                     // We don't have a specific limit for re-entry, 
@@ -277,18 +278,39 @@ class AppInterceptorService : AccessibilityService() {
             }
 
             val lifecycleOwner = MyLifecycleOwner()
+            
+            val container = object : android.widget.FrameLayout(this@AppInterceptorService) {
+                override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+                    if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP) {
+                        Log.d("AppInterceptorService", "Back button intercepted in overlay.")
+                        performGlobalAction(GLOBAL_ACTION_HOME)
+                        removeOverlay()
+                        return true
+                    }
+                    return super.dispatchKeyEvent(event)
+                }
+            }
+
+            container.setViewTreeLifecycleOwner(lifecycleOwner)
+            container.setViewTreeViewModelStoreOwner(lifecycleOwner)
+            container.setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+
             val composeView = ComposeView(this@AppInterceptorService).apply {
+                // Also set them here just in case
                 setViewTreeLifecycleOwner(lifecycleOwner)
                 setViewTreeViewModelStoreOwner(lifecycleOwner)
                 setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             }
+            
+            container.addView(composeView)
 
-            currentOverlayView = composeView
+            currentOverlayView = container
             currentLifecycleOwner = lifecycleOwner
 
             composeView.setContent {
                 MyApplicationTheme {
                     CountdownOverlayContent(
+                        packageName = packageName,
                         initialSeconds = countdownDurationSeconds,
                         onFinished = { limitMinutes ->
                             unlockApp(packageName, limitMinutes)
@@ -322,13 +344,12 @@ class AppInterceptorService : AccessibilityService() {
                 }
                 format = android.graphics.PixelFormat.TRANSLUCENT
                 flags = (WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        or WindowManager.LayoutParams.FLAG_FULLSCREEN
-                        or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                        or WindowManager.LayoutParams.FLAG_FULLSCREEN) // Removed FLAG_NOT_FOCUSABLE
                 gravity = android.view.Gravity.CENTER
             }
 
             try {
-                windowManager?.addView(composeView, params)
+                windowManager?.addView(container, params)
                 Log.d("AppInterceptorService", "Mindfulness overlay deployed successfully.")
             } catch (e: Exception) {
                 Log.e("AppInterceptorService", "Error injecting overlay window", e)
@@ -397,12 +418,47 @@ class AppInterceptorService : AccessibilityService() {
  */
 @Composable
 fun CountdownOverlayContent(
+    packageName: String,
     initialSeconds: Int,
     onFinished: (Int) -> Unit,
     onGoHome: () -> Unit
 ) {
     var secondsLeft by remember { mutableIntStateOf(initialSeconds) }
     var showTimeSelection by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val pm = context.packageManager
+    
+    val appInfo = remember(packageName) {
+        try {
+            pm.getApplicationInfo(packageName, 0)
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    val appLabel = remember(appInfo) {
+        appInfo?.loadLabel(pm)?.toString() ?: packageName
+    }
+    
+    val appIcon = remember(appInfo) {
+        try {
+            val drawable = appInfo?.loadIcon(pm)
+            drawable?.let { 
+                val bitmap = android.graphics.Bitmap.createBitmap(
+                    it.intrinsicWidth.coerceAtLeast(1), 
+                    it.intrinsicHeight.coerceAtLeast(1), 
+                    android.graphics.Bitmap.Config.ARGB_8888
+                )
+                val canvas = android.graphics.Canvas(bitmap)
+                it.setBounds(0, 0, canvas.width, canvas.height)
+                it.draw(canvas)
+                bitmap.asImageBitmap()
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     LaunchedEffect(Unit) {
         while (secondsLeft > 0) {
@@ -412,44 +468,111 @@ fun CountdownOverlayContent(
         showTimeSelection = true
     }
 
+    // Breathing animation for the ring
+    val infiniteTransition = rememberInfiniteTransition(label = "breathing")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathing_scale"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1C1B1F)),
+            .background(Color(0xEE141218)), // Translucent dark (approx 93% opacity)
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(24.dp)
         ) {
             if (!showTimeSelection) {
+                // App Context Header
+                if (appIcon != null) {
+                    Image(
+                        bitmap = appIcon,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+                
                 Text(
-                    text = secondsLeft.toString(),
-                    fontSize = 120.sp,
-                    fontWeight = FontWeight.Light,
-                    fontFamily = FontFamily.Monospace,
-                    color = Color(0xFFD0BCFF)
+                    text = "Opening $appLabel",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFE6E1E5).copy(alpha = 0.8f)
+                )
+                Text(
+                    text = "Take a mindful breath",
+                    fontSize = 14.sp,
+                    color = Color(0xFFE6E1E5).copy(alpha = 0.6f)
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(64.dp))
 
-                Button(
+                // Breathing Ring & Timer
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .scale(scale)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(0xFFD0BCFF).copy(alpha = 0.1f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(0xFFD0BCFF).copy(alpha = 0.05f))
+                    )
+                    Text(
+                        text = secondsLeft.toString(),
+                        fontSize = 80.sp,
+                        fontWeight = FontWeight.Light,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFD0BCFF)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(80.dp))
+
+                OutlinedButton(
                     onClick = onGoHome,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF49454F),
+                    colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = Color(0xFFE6E1E5)
                     ),
-                    shape = RoundedCornerShape(100)
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6E1E5).copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text(
-                        text = "Go Home",
+                        text = "Nevermind, go home",
                         fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
             } else {
+                // Post-Countdown Options
+                if (appIcon != null) {
+                    Image(
+                        bitmap = appIcon,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
                 Text(
-                    text = "How long do you need?",
+                    text = "How long do you need in $appLabel?",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFFE6E1E5),
@@ -485,7 +608,7 @@ fun CountdownOverlayContent(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     TextButton(onClick = onGoHome) {
                         Text(
