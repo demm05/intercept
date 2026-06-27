@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap
  * It features ultra-low-latency in-memory package lookup and leverages a lightweight
  * Compose system WindowManager overlay for countdowns.
  */
+@Suppress("DEPRECATION")
 class AppInterceptorService : AccessibilityService() {
 
     companion object {
