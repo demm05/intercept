@@ -178,14 +178,20 @@ class AppInterceptorService : AccessibilityService() {
                     return
                 }
 
-                val rootNode = rootInActiveWindow
-                if (rootNode != null) {
-                    val targetsOurApp = scanNodesForText(rootNode, "Focus Interceptor")
-                    rootNode.recycle()
-                    if (targetsOurApp) {
-                        Log.w("AppInterceptorService", "Defensive protection triggered for settings bypass attempt.")
-                        deployOverlay(packageName)
-                        return
+                val lastUnlock = unlockedApps[packageName] ?: 0L
+                val bypassDurationMs = bypassDurationSeconds * 1000L
+                val elapsed = System.currentTimeMillis() - lastUnlock
+                
+                if (elapsed > bypassDurationMs) {
+                    val rootNode = rootInActiveWindow
+                    if (rootNode != null) {
+                        val targetsOurApp = scanNodesForText(rootNode, "Focus Interceptor")
+                        rootNode.recycle()
+                        if (targetsOurApp) {
+                            Log.w("AppInterceptorService", "Defensive protection triggered for settings bypass attempt.")
+                            deployOverlay(packageName, launchAppOnUnlock = false)
+                            return
+                        }
                     }
                 }
             }
@@ -242,7 +248,7 @@ class AppInterceptorService : AccessibilityService() {
         }
     }
 
-    private fun deployOverlay(packageName: String) {
+    private fun deployOverlay(packageName: String, launchAppOnUnlock: Boolean = true) {
         serviceScope.launch(Dispatchers.Main) {
             if (currentOverlayView != null) return@launch // Already active
 
@@ -269,10 +275,12 @@ class AppInterceptorService : AccessibilityService() {
                             unlockApp(packageName, limitMinutes)
                             removeOverlay()
                             
-                            // Once unlocked, launch the app for the user
-                            val intent = packageManager.getLaunchIntentForPackage(packageName)
-                            if (intent != null) {
-                                startActivity(intent)
+                            if (launchAppOnUnlock) {
+                                // Once unlocked, launch the app for the user
+                                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                                if (intent != null) {
+                                    startActivity(intent)
+                                }
                             }
                         },
                         onGoHome = {

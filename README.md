@@ -1,21 +1,26 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Focus Interceptor
 
-# Run and deploy your AI Studio app
+Focus Interceptor is a high-performance Android utility designed to help users minimize digital distractions through mindful delays. Built with jetpack Compose and leveraging Android Accessibility Services, it intercepts targeted application launches and imposes a customizable countdown before granting access, encouraging mindful app usage.
 
-This contains everything you need to run your app locally.
+## Features
+- **Mindful Pause Overlay**: Intercepts selected apps and forces a countdown, preventing impulsive opening.
+- **Ultra-low Latency**: Highly optimized background service with in-memory caching for zero-lag interception.
+- **Defensive Protections**: Prevents easy bypass by requiring a reboot to disable core protections.
+- **Beautiful UI**: Modern, premium Jetpack Compose user interface.
 
-View your app in AI Studio: https://ai.studio/apps/9245f8ea-c3bc-49b3-bf33-ef774eea061c
+## Prerequisites
+- Android Studio Ladybug or later
+- Android SDK 35
+- Java 11
 
 ## Run Locally
+1. Clone the repository.
+2. Open Android Studio and select **Open** to choose the project directory.
+3. Allow Android Studio to sync Gradle and build the project.
+4. Run the app on an emulator or physical device.
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+## CI/CD
+This project is configured with GitHub Actions to automatically generate a deployable debug APK for easy side-loading upon every push to the `main` branch. See the Actions tab in GitHub to download the latest artifact.
 
-
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+## Contributing and Architecture
+Please see the [BEST_PRACTICES.md](BEST_PRACTICES.md) file for guidelines on contributing, code style, and the underlying architectural principles (MVVM) of the application.
