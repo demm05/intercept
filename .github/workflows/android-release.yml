@@ -29,8 +29,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build and Test Release
-        run: ./gradlew assembleRelease testReleaseUnitTest --no-daemon
+      - name: Build and Test
+        run: ./gradlew assembleRelease testDebugUnitTest --no-daemon
 
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2

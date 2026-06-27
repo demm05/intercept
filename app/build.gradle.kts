@@ -59,7 +59,6 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  testBuildType = "release"
 
   @Suppress("DEPRECATION")
   adbOptions {
