@@ -53,8 +53,14 @@ class MainActivity : ComponentActivity() {
 fun MainHandshakeContainer(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasOverlayPermission by remember { mutableStateOf(false) }
-    var hasAccessibilityPermission by remember { mutableStateOf(false) }
+    var hasOverlayPermission by remember {
+        mutableStateOf(Settings.canDrawOverlays(context))
+    }
+    var hasAccessibilityPermission by remember {
+        mutableStateOf(
+            isAccessibilityServiceEnabled(context, AppInterceptorService::class.java)
+        )
+    }
 
     // Re-check permissions logic
     val checkPermissions = {
@@ -65,7 +71,16 @@ fun MainHandshakeContainer(modifier: Modifier = Modifier) {
     // Polling check while onboarding is visible
     LaunchedEffect(hasOverlayPermission, hasAccessibilityPermission) {
         while (!hasOverlayPermission || !hasAccessibilityPermission) {
+            val wasOverlayGranted = hasOverlayPermission
             checkPermissions()
+            
+            // Bring app to front if overlay was just granted
+            if (!wasOverlayGranted && hasOverlayPermission) {
+                 val intent = Intent(context, MainActivity::class.java).apply {
+                     addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK)
+                 }
+                 context.startActivity(intent)
+            }
             delay(1000) 
         }
     }
@@ -107,6 +122,12 @@ fun MainHandshakeContainer(modifier: Modifier = Modifier) {
             onButtonClick = {
                 val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Undocumented extra to deep-link to the specific service
+                    val componentName = ComponentName(context.packageName, AppInterceptorService::class.java.name).flattenToString()
+                    putExtra(":settings:fragment_args_key", componentName)
+                    putExtra(":settings:show_fragment_args", Bundle().apply { 
+                        putString(":settings:fragment_args_key", componentName) 
+                    })
                 }
                 context.startActivity(intent)
             },

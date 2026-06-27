@@ -3,13 +3,13 @@ name: Android CI/CD Release
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
@@ -20,19 +20,25 @@ jobs:
         with:
           java-version: '11'
           distribution: 'temurin'
-          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: wrapper
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Build and Test Release
+        run: ./gradlew assembleRelease testReleaseUnitTest --no-daemon
 
-      - name: Run Tests
-        run: ./gradlew testDebugUnitTest
-
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: focus-interceptor-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: build-${{ github.sha }}
+          name: Build ${{ github.sha }}
+          body: "Auto-generated release containing the latest signed release APK from the main branch."
+          files: app/build/outputs/apk/release/app-release.apk
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

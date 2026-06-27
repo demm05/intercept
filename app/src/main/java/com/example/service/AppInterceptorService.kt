@@ -178,20 +178,29 @@ class AppInterceptorService : AccessibilityService() {
                     return
                 }
 
+                val rootNode = rootInActiveWindow
+                val appName = getString(com.example.R.string.app_name)
+                val targetsOurApp = rootNode != null && scanNodesForText(rootNode, appName)
+                val isDeviceAdminScreen = event.className?.toString()?.contains("DeviceAdmin") == true || 
+                                          event.className?.toString()?.contains("DevicePolicyManager") == true
+                
+                rootNode?.recycle() // Always recycle immediately after scanning
+
+                if (targetsOurApp && isDeviceAdminScreen) {
+                    Log.w("AppInterceptorService", "Blocked access to Device Admin deactivation.")
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    return
+                }
+
                 val lastUnlock = unlockedApps[packageName] ?: 0L
                 val bypassDurationMs = bypassDurationSeconds * 1000L
                 val elapsed = System.currentTimeMillis() - lastUnlock
                 
                 if (elapsed > bypassDurationMs) {
-                    val rootNode = rootInActiveWindow
-                    if (rootNode != null) {
-                        val targetsOurApp = scanNodesForText(rootNode, "Focus Interceptor")
-                        rootNode.recycle()
-                        if (targetsOurApp) {
-                            Log.w("AppInterceptorService", "Defensive protection triggered for settings bypass attempt.")
-                            deployOverlay(packageName, launchAppOnUnlock = false)
-                            return
-                        }
+                    if (targetsOurApp) {
+                        Log.w("AppInterceptorService", "Defensive protection triggered for settings bypass attempt.")
+                        deployOverlay(packageName, launchAppOnUnlock = false)
+                        return
                     }
                 }
             }

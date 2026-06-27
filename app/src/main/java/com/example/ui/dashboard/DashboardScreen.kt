@@ -13,8 +13,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -54,6 +61,25 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
     val isLoadingApps by viewModel.isLoadingApps.collectAsState()
 
     var isSearchFocused by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val dpm = remember { context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager }
+    val adminComponent = remember { ComponentName(context, com.example.service.MyDeviceAdminReceiver::class.java) }
+    
+    var isDeviceAdminEnabled by remember { mutableStateOf(dpm.isAdminActive(adminComponent)) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isDeviceAdminEnabled = dpm.isAdminActive(adminComponent)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val lazyListState = rememberLazyListState()
     
@@ -204,6 +230,59 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
                                     onCheckedChange = { active ->
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         viewModel.setServiceActive(active)
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Device Admin Card
+                        Card(
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Prevent Uninstallation",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                    Text(
+                                        text = if (isDeviceAdminEnabled) "Uninstall locked by Device Admin" else "Require blocker disable to uninstall",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Switch(
+                                    checked = isDeviceAdminEnabled,
+                                    enabled = !isDeviceAdminEnabled || (!isServiceActive && !isDisabledPending),
+                                    onCheckedChange = { activate ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (activate) {
+                                            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                                                putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+                                                putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Required to prevent uninstallation while the blocker is active.")
+                                            }
+                                            context.startActivity(intent)
+                                        } else {
+                                            if (!isServiceActive && !isDisabledPending) {
+                                                dpm.removeActiveAdmin(adminComponent)
+                                                isDeviceAdminEnabled = false
+                                            } else {
+                                                isDeviceAdminEnabled = dpm.isAdminActive(adminComponent)
+                                            }
+                                        }
                                     }
                                 )
                             }
