@@ -8,26 +8,38 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
  * and to Firebase Crashlytics (for production breadcrumbs during crashes).
  */
 object FocusLogger {
+    private fun logToCrashlytics(tag: String, message: String) {
+        try {
+            FirebaseCrashlytics.getInstance().log("$tag: $message")
+        } catch (e: Exception) {
+            // Firebase not initialized
+        }
+    }
+
     fun d(tag: String, message: String) {
         Log.d(tag, message)
-        FirebaseCrashlytics.getInstance().log("D/$tag: $message")
+        logToCrashlytics("D/$tag", message)
     }
 
     fun i(tag: String, message: String) {
         Log.i(tag, message)
-        FirebaseCrashlytics.getInstance().log("I/$tag: $message")
+        logToCrashlytics("I/$tag", message)
     }
 
     fun w(tag: String, message: String) {
         Log.w(tag, message)
-        FirebaseCrashlytics.getInstance().log("W/$tag: $message")
+        logToCrashlytics("W/$tag", message)
     }
 
     fun e(tag: String, message: String, throwable: Throwable? = null) {
         Log.e(tag, message, throwable)
-        FirebaseCrashlytics.getInstance().log("E/$tag: $message")
-        throwable?.let {
-            FirebaseCrashlytics.getInstance().recordException(it)
+        logToCrashlytics("E/$tag", message)
+        if (throwable != null) {
+            try {
+                FirebaseCrashlytics.getInstance().recordException(throwable)
+            } catch (e: Exception) {
+                // Firebase not initialized
+            }
         }
     }
 }

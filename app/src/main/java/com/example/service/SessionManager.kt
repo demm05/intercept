@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class SessionManager(
     private val scope: CoroutineScope,
+    private val timeProvider: () -> Long = { System.currentTimeMillis() },
     private val onSessionExpired: (String) -> Unit
 ) {
     // Maps packageName to the absolute timestamp (in ms) when the unlock expires.
@@ -21,7 +22,7 @@ class SessionManager(
      * Unlocks an app for the specified number of minutes.
      */
     fun unlockApp(packageName: String, limitMinutes: Int) {
-        val now = System.currentTimeMillis()
+        val now = timeProvider()
         val limitMs = limitMinutes * 60 * 1000L
         val expiryTime = now + limitMs
         
@@ -36,7 +37,7 @@ class SessionManager(
      */
     fun isAppUnlocked(packageName: String): Boolean {
         val expiryTime = sessionExpiries[packageName] ?: return false
-        if (System.currentTimeMillis() < expiryTime) {
+        if (timeProvider() < expiryTime) {
             return true
         }
         
@@ -56,7 +57,7 @@ class SessionManager(
         sessionMonitorJob?.cancel()
         sessionMonitorJob = scope.launch {
             while (isActive) {
-                val now = System.currentTimeMillis()
+                val now = timeProvider()
                 if (now >= expiryTime) {
                     FocusLogger.i("SessionManager", "Session limit reached for $packageName. Firing expiry callback.")
                     sessionExpiries.remove(packageName)
@@ -73,7 +74,7 @@ class SessionManager(
      * like exiting settings or closing an app and coming back immediately.
      */
     fun applyTransientCooldown(packageName: String, bypassDurationSeconds: Int) {
-        val expiryTime = System.currentTimeMillis() + (bypassDurationSeconds * 1000L)
+        val expiryTime = timeProvider() + (bypassDurationSeconds * 1000L)
         sessionExpiries[packageName] = expiryTime
         FocusLogger.d("SessionManager", "Applied transient $bypassDurationSeconds s cooldown for $packageName")
     }

@@ -2,10 +2,9 @@ package com.example.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
-import android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
 import android.content.Context
 import android.graphics.PixelFormat
-import android.util.Log
+import android.os.Bundle
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -17,12 +16,12 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import com.example.ui.theme.MyApplicationTheme
 import com.example.utils.FocusLogger
 import kotlinx.coroutines.CoroutineScope
@@ -108,7 +107,8 @@ class OverlayManager(
                 }
                 format = PixelFormat.TRANSLUCENT
                 flags = (WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        or WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                        or WindowManager.LayoutParams.FLAG_FULLSCREEN
+                        or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
                 gravity = Gravity.CENTER
             }
 
@@ -149,7 +149,7 @@ class MyLifecycleOwner : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistry
     private val controller = SavedStateRegistryController.create(this)
 
     init {
-        controller.performRestore(null)
+        controller.performRestore(Bundle())
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)

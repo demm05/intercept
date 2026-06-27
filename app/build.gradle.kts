@@ -59,7 +59,10 @@ android {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions { unitTests { 
+    isIncludeAndroidResources = true
+    isReturnDefaultValues = true
+  } }
 
   @Suppress("DEPRECATION")
   adbOptions {

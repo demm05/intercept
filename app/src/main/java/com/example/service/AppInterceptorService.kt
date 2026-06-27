@@ -73,6 +73,12 @@ class AppInterceptorService : AccessibilityService() {
         super.onServiceConnected()
         FocusLogger.d("AppInterceptorService", "AccessibilityService connected successfully. Initializing configurations...")
 
+        // Auto-return to the app after onboarding permission is granted
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        startActivity(intent)
+
         serviceScope.launch(Dispatchers.IO) {
             val initialSet = repository.targetedPackages.first()
             cachedTargetedPackages = initialSet
