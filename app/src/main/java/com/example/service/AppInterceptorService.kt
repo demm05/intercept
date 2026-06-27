@@ -40,6 +40,12 @@ class AppInterceptorService : AccessibilityService() {
     private var bypassDurationSeconds: Int = 60
     private var countdownDurationSeconds: Int = 10
 
+    private var isStrictAppInfoBlockEnabled: Boolean = false
+    private var isAggressivePipProtectionEnabled: Boolean = false
+    private var isAutoDismissOverlayEnabled: Boolean = true
+
+    private var currentBlockedPackage: String? = null
+
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == Intent.ACTION_SCREEN_OFF) {
@@ -79,7 +85,7 @@ class AppInterceptorService : AccessibilityService() {
         }
         startActivity(intent)
 
-        serviceScope.launch(Dispatchers.IO) {
+        serviceScope.launch {
             val initialSet = repository.targetedPackages.first()
             cachedTargetedPackages = initialSet
 
@@ -89,13 +95,13 @@ class AppInterceptorService : AccessibilityService() {
             }
         }
 
-        serviceScope.launch(Dispatchers.IO) {
+        serviceScope.launch {
             repository.isServiceActive.collect { active ->
                 isServiceActive = active
             }
         }
 
-        serviceScope.launch(Dispatchers.IO) {
+        serviceScope.launch {
             repository.countdownDurationSeconds.collect { secs ->
                 countdownDurationSeconds = secs
             }
@@ -104,6 +110,24 @@ class AppInterceptorService : AccessibilityService() {
         serviceScope.launch(Dispatchers.IO) {
             repository.bypassDurationSeconds.collect { secs ->
                 bypassDurationSeconds = secs
+            }
+        }
+
+        serviceScope.launch {
+            repository.isStrictAppInfoBlockEnabled.collect { enabled ->
+                isStrictAppInfoBlockEnabled = enabled
+            }
+        }
+
+        serviceScope.launch {
+            repository.isAggressivePipProtectionEnabled.collect { enabled ->
+                isAggressivePipProtectionEnabled = enabled
+            }
+        }
+
+        serviceScope.launch {
+            repository.isAutoDismissOverlayEnabled.collect { enabled ->
+                isAutoDismissOverlayEnabled = enabled
             }
         }
     }
@@ -141,6 +165,29 @@ class AppInterceptorService : AccessibilityService() {
 
                 if (targetsOurApp && isDeviceAdminScreen && !isAlreadyActive) return // Allowed to activate
 
+                // Strict App Info Block
+                if (targetsOurApp && isStrictAppInfoBlockEnabled) {
+                    val className = event.className?.toString() ?: ""
+                    val isAppInfoScreen = className.contains("AppInfo", ignoreCase = true) || 
+                                          className.contains("InstalledAppDetails", ignoreCase = true)
+                    
+                    if (isAppInfoScreen) {
+                        FocusLogger.w("AppInterceptorService", "Strict App Info Block triggered. Kicking to Home.")
+                        performGlobalAction(GLOBAL_ACTION_HOME)
+                        return
+                    }
+                    
+                    // Fallback to checking node IDs in case OEMs use different class names
+                    val rootNow = rootInActiveWindow
+                    val hasForceStopId = scanNodesForForceStop(rootNow)
+                    rootNow?.recycle()
+                    if (hasForceStopId) {
+                        FocusLogger.w("AppInterceptorService", "Strict App Info Block triggered. Kicking to Home.")
+                        performGlobalAction(GLOBAL_ACTION_HOME)
+                        return
+                    }
+                }
+
                 if (targetsOurApp) {
                     if (!sessionManager.isAppUnlocked(packageName)) {
                         FocusLogger.w("AppInterceptorService", "Defensive protection triggered for settings.")
@@ -150,20 +197,42 @@ class AppInterceptorService : AccessibilityService() {
                 return
             }
 
-            // 2. Standard Monitored Apps Check
+            // 2. Auto-Dismiss Overlay
+            if (isAutoDismissOverlayEnabled && overlayManager.isShowing()) {
+                val blockedPkg = currentBlockedPackage
+                if (blockedPkg != null && !isAppVisibleOnScreen(blockedPkg)) {
+                    FocusLogger.d("AppInterceptorService", "Blocked app no longer visible. Auto-dismissing overlay.")
+                    overlayManager.removeOverlay()
+                    currentBlockedPackage = null
+                }
+            }
+
+            // 3. Aggressive PiP Protection Check
+            if (isAggressivePipProtectionEnabled) {
+                for (targetPkg in cachedTargetedPackages) {
+                    if (isAppVisibleOnScreen(targetPkg)) {
+                        if (!sessionManager.isAppUnlocked(targetPkg)) {
+                            // Force PiP to full screen BEFORE overlay
+                            if (rootInActiveWindow?.packageName?.toString() != targetPkg) {
+                                val intent = packageManager.getLaunchIntentForPackage(targetPkg)
+                                if (intent != null) {
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    startActivity(intent)
+                                }
+                            }
+                            deployOverlay(targetPkg)
+                            return
+                        }
+                    }
+                }
+            }
+
+            // 4. Standard Monitored Apps Check
             if (cachedTargetedPackages.contains(packageName)) {
-                
-                // Aggressively check if the app is visible ANYWHERE on screen, including PiP
-                if (!isAppVisibleOnScreen(packageName)) {
-                    return
-                }
+                if (!isAppVisibleOnScreen(packageName)) return
 
-                // If the app is unlocked, let them use it.
-                if (sessionManager.isAppUnlocked(packageName)) {
-                    return
-                }
+                if (sessionManager.isAppUnlocked(packageName)) return
 
-                // Otherwise, deploy the overlay.
                 deployOverlay(packageName)
             }
         }
@@ -190,24 +259,20 @@ class AppInterceptorService : AccessibilityService() {
     }
 
     private fun deployOverlay(packageName: String) {
-        serviceScope.launch(Dispatchers.IO) {
-            repository.incrementInterceptionCount()
-        }
-
-        overlayManager.deployOverlay(
+        val deployed = overlayManager.deployOverlay(
             packageName = packageName,
             countdownDurationSeconds = countdownDurationSeconds,
             onSessionGranted = { limitMinutes ->
                 sessionManager.unlockApp(packageName, limitMinutes)
-                
-                // Launch intent to restore app if it was in PiP
-                val intent = packageManager.getLaunchIntentForPackage(packageName)
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
-                }
+                // We removed startActivity(intent) here to fix the "Thrown Somewhere Else" UX bug.
             }
         )
+        if (deployed) {
+            currentBlockedPackage = packageName
+            serviceScope.launch(Dispatchers.IO) {
+                repository.incrementInterceptionCount()
+            }
+        }
     }
 
     private fun scanNodesForText(node: AccessibilityNodeInfo?, textToFind: String): Boolean {
@@ -220,6 +285,23 @@ class AppInterceptorService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i)
             if (scanNodesForText(child, textToFind)) {
+                child?.recycle()
+                return true
+            }
+            child?.recycle()
+        }
+        return false
+    }
+
+    private fun scanNodesForForceStop(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+        val viewId = node.viewIdResourceName ?: ""
+        if (viewId.endsWith("id/force_stop_button", ignoreCase = true) || viewId.endsWith("id/right_button", ignoreCase = true)) {
+            return true
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (scanNodesForForceStop(child)) {
                 child?.recycle()
                 return true
             }

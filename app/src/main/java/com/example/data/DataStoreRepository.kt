@@ -28,6 +28,11 @@ class DataStoreRepository(private val context: Context) {
         private val KEY_IS_DISABLED_PENDING = booleanPreferencesKey("is_disabled_pending")
         // pending_disabled_packages: individual apps queued to be untargeted/removed on next boot
         private val KEY_PENDING_DISABLED_PACKAGES = stringPreferencesKey("pending_disabled_packages")
+
+        // Advanced Protection Features
+        private val KEY_STRICT_APP_INFO_BLOCK = booleanPreferencesKey("strict_app_info_block")
+        private val KEY_AGGRESSIVE_PIP_PROTECTION = booleanPreferencesKey("aggressive_pip_protection")
+        private val KEY_AUTO_DISMISS_OVERLAY = booleanPreferencesKey("auto_dismiss_overlay")
     }
 
     /**
@@ -86,6 +91,27 @@ class DataStoreRepository(private val context: Context) {
     val pendingDisabledPackages: Flow<Set<String>> = context.dataStore.data.map { preferences ->
         val csv = preferences[KEY_PENDING_DISABLED_PACKAGES] ?: ""
         if (csv.isEmpty()) emptySet() else csv.split(",").toSet()
+    }
+
+    /**
+     * Advanced: Strict App Info Block (Kicks to Home if Force Stop screen is opened).
+     */
+    val isStrictAppInfoBlockEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_STRICT_APP_INFO_BLOCK] ?: false // Default OFF
+    }
+
+    /**
+     * Advanced: Aggressive PiP Protection (Forces apps out of PiP mode).
+     */
+    val isAggressivePipProtectionEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_AGGRESSIVE_PIP_PROTECTION] ?: false // Default OFF
+    }
+
+    /**
+     * Advanced: Auto-Dismiss Overlay (Dismisses overlay if app goes to background).
+     */
+    val isAutoDismissOverlayEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[KEY_AUTO_DISMISS_OVERLAY] ?: false // Default OFF
     }
 
     suspend fun setServiceActive(active: Boolean) {
@@ -189,6 +215,24 @@ class DataStoreRepository(private val context: Context) {
         context.dataStore.edit { preferences ->
             preferences.remove(KEY_IS_DISABLED_PENDING)
             preferences.remove(KEY_PENDING_DISABLED_PACKAGES)
+        }
+    }
+
+    suspend fun setStrictAppInfoBlockEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_STRICT_APP_INFO_BLOCK] = enabled
+        }
+    }
+
+    suspend fun setAggressivePipProtectionEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_AGGRESSIVE_PIP_PROTECTION] = enabled
+        }
+    }
+
+    suspend fun setAutoDismissOverlayEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_AUTO_DISMISS_OVERLAY] = enabled
         }
     }
 }

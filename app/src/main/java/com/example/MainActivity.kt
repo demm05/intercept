@@ -21,7 +21,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.service.AppInterceptorService
-import com.example.ui.dashboard.DashboardScreen
+import com.example.ui.dashboard.MainScreen
 import com.example.ui.onboarding.PermissionOnboardingScreen
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
@@ -134,8 +134,8 @@ fun MainHandshakeContainer(modifier: Modifier = Modifier) {
             modifier = modifier
         )
     } else {
-        DashboardScreen(
-            modifier = modifier
+        MainScreen(
+            // modifier = modifier // MainScreen handles its own padding
         )
     }
 }

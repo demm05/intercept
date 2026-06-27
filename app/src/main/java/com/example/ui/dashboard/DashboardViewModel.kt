@@ -5,16 +5,19 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.data.DataStoreRepository
 import com.example.model.InstalledAppItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class DashboardViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repository = DataStoreRepository(application)
+class DashboardViewModel(
+    application: Application,
+    private val repository: DataStoreRepository
+) : AndroidViewModel(application) {
 
     val isServiceActive = repository.isServiceActive.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val targetedPackages = repository.targetedPackages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
@@ -23,6 +26,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val bypassDurationSeconds = repository.bypassDurationSeconds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 60)
     val isDisabledPending = repository.isDisabledPending.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val pendingDisabledPackages = repository.pendingDisabledPackages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    val isStrictAppInfoBlockEnabled = repository.isStrictAppInfoBlockEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isAggressivePipProtectionEnabled = repository.isAggressivePipProtectionEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isAutoDismissOverlayEnabled = repository.isAutoDismissOverlayEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _installedApps = MutableStateFlow<List<InstalledAppItem>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppItem>> = _installedApps.asStateFlow()
@@ -98,6 +105,35 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             } else {
                 repository.addTargetedPackage(packageName)
                 repository.removePendingDisablePackage(packageName)
+            }
+        }
+    }
+
+    fun setStrictAppInfoBlockEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setStrictAppInfoBlockEnabled(enabled) }
+    }
+
+    fun setAggressivePipProtectionEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setAggressivePipProtectionEnabled(enabled) }
+    }
+
+    fun setAutoDismissOverlayEnabled(enabled: Boolean) {
+        viewModelScope.launch { repository.setAutoDismissOverlayEnabled(enabled) }
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(
+                modelClass: Class<T>,
+                extras: CreationExtras
+            ): T {
+                require(modelClass.isAssignableFrom(DashboardViewModel::class.java)) {
+                    "Unknown ViewModel class: ${modelClass.name}"
+                }
+                val application = checkNotNull(extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY])
+                val repository = DataStoreRepository(application)
+                return DashboardViewModel(application, repository) as T
             }
         }
     }

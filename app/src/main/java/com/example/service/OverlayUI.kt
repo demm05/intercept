@@ -96,8 +96,10 @@ fun CountdownOverlayContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(24.dp)
+            modifier = Modifier.fillMaxHeight().padding(24.dp)
         ) {
+            Spacer(modifier = Modifier.weight(1f))
+
             if (!showTimeSelection) {
                 // App Context Header
                 if (appIcon != null) {
@@ -123,7 +125,7 @@ fun CountdownOverlayContent(
                     color = Color(0xFFE6E1E5).copy(alpha = 0.6f)
                 )
 
-                Spacer(modifier = Modifier.height(64.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
                 // Breathing Ring & Timer
                 Box(contentAlignment = Alignment.Center) {
@@ -149,7 +151,7 @@ fun CountdownOverlayContent(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
                 OutlinedButton(
                     onClick = onGoHome,
@@ -166,6 +168,8 @@ fun CountdownOverlayContent(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
+
+                Spacer(modifier = Modifier.weight(1f))
             } else {
                 // Post-Countdown Options
                 if (appIcon != null) {
@@ -186,7 +190,7 @@ fun CountdownOverlayContent(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.weight(1f))
 
                 val options = listOf(
                     "1 min" to 1,
@@ -224,6 +228,8 @@ fun CountdownOverlayContent(
                         )
                     }
                 }
+                
+                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }

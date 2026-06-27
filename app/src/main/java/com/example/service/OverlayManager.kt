@@ -39,17 +39,19 @@ class OverlayManager(
     
     private var currentOverlayView: View? = null
     private var currentLifecycleOwner: MyLifecycleOwner? = null
+    private var overlayDeploymentPending = false
 
-    fun isShowing(): Boolean = currentOverlayView != null
+    fun isShowing(): Boolean = currentOverlayView != null || overlayDeploymentPending
 
     fun deployOverlay(
         packageName: String,
         countdownDurationSeconds: Int,
         onSessionGranted: (Int) -> Unit
-    ) {
-        scope.launch(Dispatchers.Main) {
-            if (currentOverlayView != null) return@launch // Already active
+    ): Boolean {
+        if (currentOverlayView != null || overlayDeploymentPending) return false
+        overlayDeploymentPending = true
 
+        scope.launch(Dispatchers.Main) {
             val lifecycleOwner = MyLifecycleOwner()
             
             val container = object : FrameLayout(service) {
@@ -117,8 +119,13 @@ class OverlayManager(
                 FocusLogger.d("OverlayManager", "Mindfulness overlay deployed successfully.")
             } catch (e: Exception) {
                 FocusLogger.e("OverlayManager", "Error injecting overlay window", e)
+                currentOverlayView = null
+                currentLifecycleOwner = null
+                lifecycleOwner.destroy()
             }
+            overlayDeploymentPending = false
         }
+        return true
     }
 
     fun removeOverlay() {

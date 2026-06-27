@@ -1,7 +1,8 @@
 package com.example.ui.dashboard
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColor
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,7 +46,7 @@ import com.example.model.InstalledAppItem
  */
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel = viewModel()) {
+fun AppsScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory)) {
     val haptic = LocalHapticFeedback.current
 
     val isServiceActive by viewModel.isServiceActive.collectAsState()
@@ -56,30 +57,15 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
     val isDisabledPending by viewModel.isDisabledPending.collectAsState()
     val pendingDisabledPackages by viewModel.pendingDisabledPackages.collectAsState()
 
+
+
     val installedApps by viewModel.installedApps.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isLoadingApps by viewModel.isLoadingApps.collectAsState()
 
     var isSearchFocused by remember { mutableStateOf(false) }
 
-    val context = LocalContext.current
-    val dpm = remember { context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager }
-    val adminComponent = remember { ComponentName(context, com.example.service.MyDeviceAdminReceiver::class.java) }
-    
-    var isDeviceAdminEnabled by remember { mutableStateOf(dpm.isAdminActive(adminComponent)) }
 
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                isDeviceAdminEnabled = dpm.isAdminActive(adminComponent)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
 
     val lazyListState = rememberLazyListState()
     
@@ -108,11 +94,26 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
         active to others
     }
 
+    // Animated gradient background colors
+    val infiniteTransitionBg = rememberInfiniteTransition(label = "bg_anim")
+    val color1 by infiniteTransitionBg.animateColor(
+        initialValue = Color(0xFF1E103C),
+        targetValue = Color(0xFF2D1652),
+        animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "color1"
+    )
+    val color2 by infiniteTransitionBg.animateColor(
+        initialValue = Color(0xFF0F0C16),
+        targetValue = Color(0xFF1A1225),
+        animationSpec = infiniteRepeatable(tween(6000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "color2"
+    )
+
     LazyColumn(
         state = lazyListState,
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(color1, color2))),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item(key = "dashboard_header") {
@@ -152,8 +153,9 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
 
                         // Live stats block
                         Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFD0BCFF).copy(alpha = 0.1f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD0BCFF).copy(alpha = 0.2f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -190,14 +192,15 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
 
                         // Main Blocker Status Card (With Reboot constraint logic)
                         Card(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isDisabledPending) {
                                     MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
                                 } else {
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                                    Color(0xFF8A2BE2).copy(alpha = 0.15f) // Vibrant neon purple tint
                                 }
                             ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isDisabledPending) MaterialTheme.colorScheme.error.copy(alpha = 0.3f) else Color(0xFF8A2BE2).copy(alpha = 0.3f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -235,136 +238,7 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // Device Admin Card
-                        Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Prevent Uninstallation",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                    Text(
-                                        text = if (isDeviceAdminEnabled) "Uninstall locked by Device Admin" else "Require blocker disable to uninstall",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                Switch(
-                                    checked = isDeviceAdminEnabled,
-                                    enabled = !isDeviceAdminEnabled || (!isServiceActive && !isDisabledPending),
-                                    onCheckedChange = { activate ->
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        if (activate) {
-                                            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
-                                                putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
-                                                putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Required to prevent uninstallation while the blocker is active.")
-                                            }
-                                            context.startActivity(intent)
-                                        } else {
-                                            if (!isServiceActive && !isDisabledPending) {
-                                                dpm.removeActiveAdmin(adminComponent)
-                                                isDeviceAdminEnabled = false
-                                            } else {
-                                                isDeviceAdminEnabled = dpm.isAdminActive(adminComponent)
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Slider for delay configuration
-                        Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                Row(
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Countdown delay duration",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                    Text(
-                                        text = "${countdownDurationSeconds}s",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Slider(
-                                    value = countdownDurationSeconds.toFloat(),
-                                    onValueChange = { seconds ->
-                                        viewModel.setCountdownDuration(seconds.toInt())
-                                    },
-                                    valueRange = 5f..30f,
-                                    steps = 4
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Slider for bypass duration
-                        Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(20.dp)) {
-                                Row(
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Re-entry grace period",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                    Text(
-                                        text = "${bypassDurationSeconds}s",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Slider(
-                                    value = bypassDurationSeconds.toFloat(),
-                                    onValueChange = { seconds ->
-                                        viewModel.setBypassDuration(seconds.toInt())
-                                    },
-                                    valueRange = 0f..300f,
-                                    steps = 9
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
 
                         // App list Header
                         Text(
@@ -384,7 +258,9 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(color1.copy(alpha = 0.95f), color1.copy(alpha = 0.8f))
+                    ))
                     .padding(horizontal = 24.dp, vertical = 8.dp)
             ) {
                 TextField(
@@ -403,10 +279,10 @@ fun DashboardScreen(modifier: Modifier = Modifier, viewModel: DashboardViewModel
                         }
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        focusedContainerColor = Color.White.copy(alpha = 0.1f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent
                     ),
@@ -519,11 +395,11 @@ fun AppRowItem(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+            .heightIn(min = 76.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isTargeted && !isPendingDisable) Color(0xFF8A2BE2).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
             .clickable { onToggleTarget(!isTargeted || isPendingDisable) }
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Box(
             modifier = Modifier
